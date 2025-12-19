@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
+const healthMetrics = require('../utils/healthMetrics');
+const dataExport = require('../utils/dataExports');
+
 const escapeHtml = (text) => {
     if (!text) return '';
     return String(text)
@@ -21,15 +24,10 @@ router.post('/calculate-bmi', (req, res) => {
         const height = parseFloat(req.body.height);
         const fatIndex = parseFloat(req.body.fatIndex) || 0;
         const muscleIndex = parseFloat(req.body.muscleIndex) || 0;
+        const gender = req.body.gender || 'male';
 
         if (!weight || !height || weight <= 0 || height <= 0) {
-            return res.send(`
-                <div style="color: red; padding: 20px;">
-                    <h2>Error</h2>
-                    <p>Weight and height must be positive numbers</p>
-                    <a href="/">Go Back</a>
-                </div>
-            `);
+            return res.send(`<div style="color:red;"><h2>Error:</h2>Weight and height must be positive numbers<br><a href="/">Go Back</a></div>`);
         }
 
         if (height > 300) {
@@ -40,35 +38,34 @@ router.post('/calculate-bmi', (req, res) => {
         const bmi = weight / (heightInMeters * heightInMeters);
 
         let category, color, recommendations;
-        
         const recommendationsData = {
             underweight: [
                 'Increase calorie intake by 300-500 calories per day',
-                'Consume protein-rich foods (eggs, chicken, fish, legumes)',
-                'Add healthy fats (avocado, nuts, olive oil)',
-                'Strength training to build muscle mass',
+                'Consume protein-rich foods',
+                'Add healthy fats',
+                'Strength training to build muscle',
                 'Eat smaller, more frequent meals'
             ],
             normal: [
                 'Maintain current balanced diet',
-                'Exercise 3-5 times per week (cardio + strength)',
+                'Exercise 3-5 times per week',
                 'Drink at least 2 liters of water daily',
-                'Get 7-9 hours of sleep per night',
+                'Get 7-9 hours of sleep',
                 'Regular health check-ups'
             ],
             overweight: [
                 'Reduce daily calorie intake by 500 calories',
-                'Increase physical activity to 60 minutes daily',
+                'Increase physical activity',
                 'Limit processed foods and sugary drinks',
-                'Increase fiber intake (vegetables, whole grains)',
-                'Track your food intake in a diary'
+                'Increase fiber intake',
+                'Track your food intake'
             ],
             obese: [
                 'Consult with healthcare professional',
                 'Consider medical weight loss program',
-                'Join support group or find accountability partner',
-                'Start with low-impact exercises (walking, swimming)',
-                'Focus on sustainable lifestyle changes, not quick fixes'
+                'Join support group',
+                'Start with low-impact exercises',
+                'Focus on sustainable lifestyle changes'
             ]
         };
 
@@ -91,118 +88,53 @@ router.post('/calculate-bmi', (req, res) => {
         }
 
         let additionalAdvice = [];
-        
-        if (fatIndex > 30) {
-            additionalAdvice.push('High fat index detected - consider reducing body fat percentage');
-        }
-        if (muscleIndex < 40) {
-            additionalAdvice.push('Low muscle index - include strength training in your routine');
-        }
-        if (fatIndex < 15 && muscleIndex > 45) {
-            additionalAdvice.push('Excellent body composition! Maintain your current fitness routine');
-        }
+        if (fatIndex > 30) additionalAdvice.push('High fat index detected - consider reducing body fat percentage');
+        if (muscleIndex < 40) additionalAdvice.push('Low muscle index - include strength training');
+        if (fatIndex < 15 && muscleIndex > 45) additionalAdvice.push('Excellent body composition! Maintain your routine');
+
+        const idealWeight = healthMetrics.calculateIdealWeight(height, gender);
+
+        const jsonExport = dataExport.exportToJSON({
+            bmi: bmi.toFixed(2),
+            category,
+            fatIndex,
+            muscleIndex,
+            idealWeight: idealWeight.toFixed(1),
+        });
 
         const resultHtml = `
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>BMI Results</title>
-            <link rel="stylesheet" href="/css/style.css">
             <style>
-                .result-container {
-                    max-width: 600px;
-                    margin: 40px auto;
-                    padding: 30px;
-                    background: white;
-                    border-radius: 10px;
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-                }
-                .bmi-value {
-                    font-size: 48px;
-                    font-weight: bold;
-                    margin: 20px 0;
-                }
-                .category-badge {
-                    display: inline-block;
-                    padding: 10px 20px;
-                    border-radius: 20px;
-                    color: white;
-                    font-weight: bold;
-                    margin-bottom: 20px;
-                }
-                .recommendation-card {
-                    background: #f8f9fa;
-                    border-left: 4px solid ${color};
-                    padding: 15px;
-                    margin: 10px 0;
-                }
-                .additional-inputs {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 20px;
-                    margin: 20px 0;
-                }
-                .input-box {
-                    padding: 15px;
-                    background: #e8f4fc;
-                    border-radius: 5px;
-                }
-                .back-btn {
-                    display: inline-block;
-                    margin-top: 20px;
-                    padding: 10px 20px;
-                    background: ${color};
-                    color: white;
-                    text-decoration: none;
-                    border-radius: 5px;
-                }
+                body { font-family: Arial; background: #f4f4f4; padding: 20px; }
+                .container { max-width:600px; margin:auto; background:white; padding:20px; border-radius:10px; }
+                .bmi { font-size:48px; font-weight:bold; color:${color}; }
+                .recommendation { background:#f8f8f8; padding:10px; margin:5px 0; border-left:4px solid ${color}; }
+                .back { display:inline-block; margin-top:20px; padding:10px 20px; background:${color}; color:white; text-decoration:none; border-radius:5px; }
+                textarea { width:100%; }
             </style>
         </head>
         <body>
-            <div class="result-container">
+            <div class="container">
                 <h1>BMI Calculation Results</h1>
-                
-                <div class="bmi-value" style="color: ${color}">
-                    ${bmi.toFixed(1)}
-                </div>
-                
-                <div class="category-badge" style="background: ${color}">
-                    ${escapeHtml(category)}
-                </div>
-                
-                <div class="additional-inputs">
-                    <div class="input-box">
-                        <h3>Fatness Index</h3>
-                        <p>${escapeHtml(fatIndex)}%</p>
-                    </div>
-                    <div class="input-box">
-                        <h3>Muscle Index</h3>
-                        <p>${escapeHtml(muscleIndex)}%</p>
-                    </div>
-                </div>
-                
-                ${additionalAdvice.length > 0 ? `
-                <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <h3>Additional Analysis</h3>
-                    <ul>
-                        ${additionalAdvice.map(advice => `<li>${escapeHtml(advice)}</li>`).join('')}
-                    </ul>
-                </div>
-                ` : ''}
-                
-                <h2>Personalized Recommendations</h2>
-                ${recommendations.map(rec => `
-                    <div class="recommendation-card">
-                        ✓ ${escapeHtml(rec)}
-                    </div>
-                `).join('')}
-                
-                <h3>Health Risk Assessment</h3>
-                <p>${getRiskAssessment(category, bmi)}</p>
-                
-                <a href="/" class="back-btn">Calculate Again</a>
+                <div class="bmi">${bmi.toFixed(1)}</div>
+                <h2>${escapeHtml(category)}</h2>
+
+                ${additionalAdvice.length > 0 ? `<div style="background:#fff3cd;padding:10px;border-radius:5px;"><ul>${additionalAdvice.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul></div>` : ''}
+
+                <h3>Recommendations:</h3>
+                ${recommendations.map(r => `<div class="recommendation">✓ ${escapeHtml(r)}</div>`).join('')}
+
+                <h3>Ideal Weight:</h3>
+                <p>${idealWeight.toFixed(1)} kg</p>
+
+                <h3>Export JSON:</h3>
+                <textarea rows="5">${jsonExport}</textarea>
+
+                <a href="/" class="back">Calculate Again</a>
             </div>
         </body>
         </html>
@@ -210,27 +142,10 @@ router.post('/calculate-bmi', (req, res) => {
 
         res.send(resultHtml);
 
-    } catch (error) {
-        console.error('Error calculating BMI:', error);
+    } catch (err) {
+        console.error(err);
         res.status(500).send('Server error occurred');
     }
 });
-
-function getRiskAssessment(category, bmi) {
-    const risks = {
-        'Underweight': 'Increased risk of osteoporosis, anemia, and weakened immune system',
-        'Normal Weight': 'Lowest health risks. Maintain your healthy lifestyle!',
-        'Overweight': 'Moderate risk of heart disease, high blood pressure, and type 2 diabetes',
-        'Obese': 'High risk of cardiovascular diseases, stroke, diabetes, and certain cancers'
-    };
-    
-    let riskLevel = risks[category] || 'Risk assessment not available';
-    
-    if (bmi > 35) {
-        riskLevel += ' (Very High Risk - Immediate medical consultation recommended)';
-    }
-    
-    return riskLevel;
-}
 
 module.exports = router;

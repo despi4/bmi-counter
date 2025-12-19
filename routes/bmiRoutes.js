@@ -31,7 +31,7 @@ router.post('/calculate-bmi', (req, res) => {
         }
 
         if (height > 300) {
-            return res.send('Height seems unrealistic. Please check your input.');
+            return res.send("Unrealistic height, please enter real number");
         }
 
         const heightInMeters = height / 100;
